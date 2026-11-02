@@ -1,0 +1,26 @@
+# Original prototypes contain device identifiers and stay on this machine.
+legacy/
+
+# Diagnostic logs contain device identifiers and personal paths.
+*.log
+*.log.*
+
+# Local settings and device identifiers.
+config.local.*
+settings.local.*
+*.local.json
+.env
+
+# Captures and screenshots: public fixtures must be synthetic.
+*.png
+*.jpg
+*.jpeg
+*.bmp
+scan-output*.txt
+
+# Python and tooling.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.claude/
