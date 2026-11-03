@@ -3,6 +3,7 @@
 Scenes use only basic integer arithmetic, not NumPy's random generators, so the
 pixels stay identical across NumPy versions.
 """
+import colorsys
 import hashlib
 
 import numpy as np
@@ -104,6 +105,34 @@ def small_frame():
 SCENES = {scene.__name__: scene for scene in (
     dark_blue_cave, black, white_hud, red_green_split, pure_red, gradient, noise,
     grass_sky, hud_overlay, ember_on_dark, ultrawide, small_frame)}
+
+
+def _bgr(hue, saturation, value):
+    red, green, blue = colorsys.hsv_to_rgb(hue / 360, saturation, value)
+    return round(blue * 255), round(green * 255), round(red * 255)
+
+
+def banded(first, second, band=10):
+    """Fine horizontal bands, so two tones compete inside every analysis region."""
+    frame = _blank()
+    for start in range(0, 360, band * 2):
+        frame[start:start + band, :, :3] = _bgr(*first)
+        frame[start + band:start + band * 2, :, :3] = _bgr(*second)
+    return frame
+
+
+# (hue, saturation, value) pairs chosen so the output depends on the weighting
+# constants: different brightness or saturation, and hues close enough not to cancel.
+SENSITIVITY_SCENES = {
+    'bright_orange_dim_blue': lambda: banded((30, .9, .95), (210, .9, .12)),
+    'bright_red_dim_yellow': lambda: banded((0, .85, .9), (60, .85, .15)),
+    'mid_green_dim_cyan': lambda: banded((120, .8, .6), (180, .8, .1)),
+    'pale_magenta_vivid_blue': lambda: banded((300, .3, .7), (240, .95, .7)),
+    'pale_red_vivid_green': lambda: banded((10, .25, .8), (100, .9, .6)),
+    'near_threshold_tones': lambda: banded((40, .21, .5), (160, .6, .08)),
+    'highlight_cap_tones': lambda: banded((200, .7, .97), (280, .7, .74)),
+    'dark_floor_tones': lambda: banded((20, .7, .08), (90, .7, .3)),
+}
 
 
 def scene_hash(frame):

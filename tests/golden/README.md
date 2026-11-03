@@ -7,6 +7,11 @@ scenes. It holds 447 stable entries, recorded with Python 3.14.3 and NumPy 1.26.
 Do not re-record it to make a test pass. `record_baseline.py` refuses to replace an
 existing file for that reason.
 
+`sensitivity.json` is a separate supplement, also recorded from the unmodified
+prototype. The scenes in `baseline.json` are mostly flat tones, which cannot detect
+small changes to the weighting constants, so these scenes make hues compete across
+different brightness and saturation levels.
+
 ## Why two adaptive entries are excluded
 
 The first recording had 449 entries. These two differed between NumPy builds:

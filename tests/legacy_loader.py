@@ -5,6 +5,7 @@ so its globals can never reach the screen or a Bluetooth adapter.
 """
 import importlib.util
 import sys
+import tkinter as tk
 import types
 from pathlib import Path
 
@@ -39,6 +40,24 @@ class FakeScreen:
 class _ForbiddenBluetooth:
     def __init__(self, *args, **kwargs):
         raise AssertionError('tests must not create a real Bluetooth object')
+
+
+_tk_root = None
+
+
+def tk_window():
+    """Return a new hidden window on one shared Tk root.
+
+    Creating a second Tcl interpreter fails intermittently with
+    ``invalid command name "tcl_findLibrary"``, so the process only ever makes one.
+    """
+    global _tk_root
+    if _tk_root is None:
+        _tk_root = tk.Tk()
+        _tk_root.withdraw()
+    window = tk.Toplevel(_tk_root)
+    window.withdraw()
+    return window
 
 
 def available():

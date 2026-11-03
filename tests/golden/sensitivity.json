@@ -1,0 +1,51 @@
+{
+"recorded_with": {
+"python": "3.14.3",
+"numpy": "1.26.3",
+"pillow": "12.1.1"
+},
+"scene_hashes": {
+"bright_orange_dim_blue": "3dc51f566110ed48",
+"bright_red_dim_yellow": "07744f04e8cd2666",
+"mid_green_dim_cyan": "dbc839a54f227ca0",
+"pale_magenta_vivid_blue": "4a1f2294b89094b9",
+"pale_red_vivid_green": "2bce8ef10135f2ef",
+"near_threshold_tones": "8b51308a2075338f",
+"highlight_cap_tones": "5e637505f648ddd6",
+"dark_floor_tones": "a75f0ca496638edc"
+},
+"analysis": {
+"bright_orange_dim_blue|Atmospheric|multi=True": "bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000",
+"bright_orange_dim_blue|Atmospheric|multi=False": "bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000",
+"bright_orange_dim_blue|Dominant colors|multi=True": "bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000",
+"bright_orange_dim_blue|Dominant colors|multi=False": "bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000 bf6000",
+"bright_red_dim_yellow|Atmospheric|multi=True": "bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00",
+"bright_red_dim_yellow|Atmospheric|multi=False": "bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00 bf2d00",
+"bright_red_dim_yellow|Dominant colors|multi=True": "bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000",
+"bright_red_dim_yellow|Dominant colors|multi=False": "bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000 bf0000",
+"mid_green_dim_cyan|Atmospheric|multi=True": "00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b",
+"mid_green_dim_cyan|Atmospheric|multi=False": "00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b 00bf2b",
+"mid_green_dim_cyan|Dominant colors|multi=True": "00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00",
+"mid_green_dim_cyan|Dominant colors|multi=False": "00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00 00bf00",
+"pale_magenta_vivid_blue|Atmospheric|multi=True": "0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf",
+"pale_magenta_vivid_blue|Atmospheric|multi=False": "0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf 0c00bf",
+"pale_magenta_vivid_blue|Dominant colors|multi=True": "0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf",
+"pale_magenta_vivid_blue|Dominant colors|multi=False": "0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf 0000bf",
+"pale_red_vivid_green|Atmospheric|multi=True": "4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00",
+"pale_red_vivid_green|Atmospheric|multi=False": "4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00 4cbf00",
+"pale_red_vivid_green|Dominant colors|multi=True": "40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00",
+"pale_red_vivid_green|Dominant colors|multi=False": "40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00 40bf00",
+"near_threshold_tones|Atmospheric|multi=True": "2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67",
+"near_threshold_tones|Atmospheric|multi=False": "2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67 2cbf67",
+"near_threshold_tones|Dominant colors|multi=True": "13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86",
+"near_threshold_tones|Dominant colors|multi=False": "13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86 13bf86",
+"highlight_cap_tones|Atmospheric|multi=True": "0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf",
+"highlight_cap_tones|Atmospheric|multi=False": "0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf 0001bf",
+"highlight_cap_tones|Dominant colors|multi=True": "0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf",
+"highlight_cap_tones|Dominant colors|multi=False": "0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf 0080bf",
+"dark_floor_tones|Atmospheric|multi=True": "a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00",
+"dark_floor_tones|Atmospheric|multi=False": "a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00 a5bf00",
+"dark_floor_tones|Dominant colors|multi=True": "61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00",
+"dark_floor_tones|Dominant colors|multi=False": "61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00 61bf00"
+}
+}

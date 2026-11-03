@@ -11,6 +11,11 @@ def baseline():
     return json.loads((Path(__file__).parent / 'golden' / 'baseline.json').read_text(encoding='utf-8'))
 
 
+@pytest.fixture(scope='session')
+def sensitivity_baseline():
+    return json.loads((Path(__file__).parent / 'golden' / 'sensitivity.json').read_text(encoding='utf-8'))
+
+
 def _load(name):
     if not legacy_loader.available():
         pytest.skip('legacy/ is local-only and not present')

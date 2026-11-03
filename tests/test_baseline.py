@@ -21,6 +21,10 @@ def test_analysis_matches_baseline(ambient, baseline):
     assert_matches(baseline_builder.analysis(ambient), baseline['analysis'])
 
 
+def test_sensitivity_scenes_match_baseline(ambient, sensitivity_baseline):
+    assert_matches(baseline_builder.sensitivity(ambient), sensitivity_baseline['analysis'])
+
+
 def test_dimming_matches_baseline(ambient, baseline):
     assert_matches(baseline_builder.dimming(ambient), baseline['dimming'])
 

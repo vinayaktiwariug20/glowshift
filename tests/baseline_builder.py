@@ -4,13 +4,12 @@ Colors are stored as ``rrggbb`` strings, one entry per line in the JSON file, so
 a future change appears as a small, readable diff.
 """
 import queue
-import tkinter as tk
 import types
 
 import numpy as np
 
 import legacy_loader
-from scenes import SCENES, grass_sky, dark_blue_cave, scene_hash
+from scenes import SCENES, SENSITIVITY_SCENES, grass_sky, dark_blue_cave, scene_hash
 
 # Current GUI tuning, and analyze_frame's own different keyword defaults.
 GUI_TUNING = {'saturation_boost': 1.5, 'minimum_saturation': .60, 'minimum_value': .75}
@@ -36,6 +35,23 @@ def analysis(ambient):
                         result[key] = _hex(ambient.analyze_frame(
                             frame, multicolor, color_mode=mode, spatial_mapping=mapping, **tuning))
     return result
+
+
+def sensitivity(ambient):
+    result = {}
+    for scene_name, scene in SENSITIVITY_SCENES.items():
+        frame = scene()
+        for mode in ('Atmospheric', 'Dominant colors'):
+            for multicolor in (True, False):
+                key = f'{scene_name}|{mode}|multi={multicolor}'
+                result[key] = _hex(ambient.analyze_frame(frame, multicolor, color_mode=mode, **GUI_TUNING))
+    return result
+
+
+def build_sensitivity():
+    ambient = legacy_loader.load(legacy_loader.AMBIENT)
+    return {'scene_hashes': {name: scene_hash(scene()) for name, scene in SENSITIVITY_SCENES.items()},
+            'analysis': sensitivity(ambient)}
 
 
 def dimming(ambient):
@@ -96,16 +112,21 @@ def run_capture(ambient, frames, ticks, **overrides):
     return previews
 
 
-def smoothing(ambient):
+def smoothing_entries(run):
     # Scene changes after two samples; keep every fourth preview to bound file size.
     frames = [dark_blue_cave(), dark_blue_cave(), grass_sky()]
     result = {}
     for name, overrides in {'default': {}, 'transition_0': {'transition': 0.0},
                             'brightness_20': {'brightness': 20}}.items():
-        previews = run_capture(ambient, frames, 60, **overrides)
+        previews = run(frames, 60, **overrides)
         for index in range(0, len(previews), 4):
             result[f'{name}|{index:02d}'] = _hex(previews[index])
     return result
+
+
+def smoothing(ambient):
+    return smoothing_entries(lambda frames, ticks, **overrides:
+                             run_capture(ambient, frames, ticks, **overrides))
 
 
 def packets(ambient, studio):
@@ -159,8 +180,7 @@ def adaptive(module):
 
 
 def gui_defaults(ambient):
-    root = tk.Tk()
-    root.withdraw()
+    root = legacy_loader.tk_window()
     try:
         window = ambient.Window(root)
         fields = ('color_mode', 'spatial_mapping', 'interval', 'transition', 'brightness',
