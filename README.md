@@ -3,9 +3,10 @@
 Open-source Windows application for screen-reactive RGB lighting, currently
 targeting the Govee H617A Bluetooth LED strip (15 segments).
 
-**Status:** pre-release. `src/glowshift` holds the extracted protocol, color analysis,
-smoothing, animation and design logic. Bluetooth connection management, screen
-capture and the GUI are not in the package yet.
+**Status:** pre-release. `src/glowshift` holds the protocol, color analysis, smoothing,
+animations, design files, connection manager and session lifecycle. The connection
+manager has only run against a simulated device so far, and the GUI is not in the
+package yet. `python tests/demo_simulated_session.py` demonstrates it without hardware.
 
 ## Development setup
 

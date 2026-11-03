@@ -6,11 +6,12 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path[:0] = [str(Path(__file__).parent), str(Path(__file__).parent.parent / 'src')]
 import baseline_builder  # noqa: E402
 
 GOLDEN = Path(__file__).parent / 'golden'
-TARGETS = {'baseline.json': baseline_builder.build, 'sensitivity.json': baseline_builder.build_sensitivity}
+TARGETS = {'baseline.json': baseline_builder.build, 'sensitivity.json': baseline_builder.build_sensitivity,
+           'ble_timeline.json': baseline_builder.build_ble_timeline}
 
 
 def main():

@@ -86,7 +86,8 @@ def test_stable_analysis_does_not_load_the_experimental_algorithm():
 def test_package_import_needs_no_hardware_libraries():
     code = ('import sys, glowshift.analysis.ambient, glowshift.analysis.smoothing,'
             'glowshift.animations.effects, glowshift.animations.designs,'
-            'glowshift.devices.govee.protocol;'
+            'glowshift.devices.govee.protocol, glowshift.devices.govee.connection,'
+            'glowshift.capture.loop, glowshift.engine.session, glowshift.diagnostics;'
             "assert not {'bleak', 'mss', 'tkinter'} & set(sys.modules)")
     run_fresh_interpreter(code)
 
