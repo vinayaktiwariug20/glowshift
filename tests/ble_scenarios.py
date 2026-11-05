@@ -28,6 +28,14 @@ SCENARIOS = {
 # Recorded for reference only: the package deliberately differs here. See test_ble_timing.py.
 LEGACY_DROP_SCENARIO = ([Step(drop_after_writes=5)], _frames(40, .5, 5), 60.05)
 
+# In SCENARIOS some frames arrive at the same virtual instant as a connection or a
+# poll, so the result depends on which task the event loop happens to run first.
+# Real timers never tie exactly. These copies move every frame 1 ms later, so their
+# timelines depend only on timing. Recorded separately; the original file is unchanged.
+UNTIE_OFFSET = .001
+UNTIED_SCENARIOS = {name: (steps, [(at + UNTIE_OFFSET, colors) for at, colors in frames], duration)
+                    for name, (steps, frames, duration) in SCENARIOS.items()}
+
 
 async def _feed(frames, publish):
     moment = 0.0
@@ -98,6 +106,10 @@ def run_legacy(ambient, steps, frames, duration):
 
 def scenarios(run):
     return {name: run(steps, frames, duration) for name, (steps, frames, duration) in SCENARIOS.items()}
+
+
+def build_untied_baseline(ambient):
+    return {'timelines': {name: run_legacy(ambient, *scenario) for name, scenario in UNTIED_SCENARIOS.items()}}
 
 
 def build_timeline_baseline(ambient):

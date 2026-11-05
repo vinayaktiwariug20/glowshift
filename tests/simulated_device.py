@@ -14,15 +14,27 @@ HANG = 'hang'
 IGNORE_CANCEL = 'ignore-cancel'
 
 
+START = 1000.0
+VIRTUAL_LIMIT = 3600.0  # No scenario runs this long; one that does is a hang.
+
+
+class VirtualTimeLimitExceeded(RuntimeError):
+    pass
+
+
 class _VirtualSelector:
     def __init__(self):
         self._real = selectors.DefaultSelector()
-        self.now = 1000.0
+        self.now = START
+        self._tripped = False
 
     def select(self, timeout=None):
         if timeout is None:
             raise RuntimeError('deadlock: nothing is scheduled')
         self.now += timeout
+        if not self._tripped and self.now - START > VIRTUAL_LIMIT:
+            self._tripped = True  # Once only, so the runner can still cancel the tasks.
+            raise VirtualTimeLimitExceeded(f'still running after {VIRTUAL_LIMIT:.0f} virtual seconds: hang')
         return self._real.select(0)
 
     def __getattr__(self, name):
@@ -52,6 +64,9 @@ class Step:
     drop_after_writes: int = None
     drop_after_seconds: float = None
     fire_callback: bool = True        # False: the link drops with no callback
+    callback_delay: float = None      # seconds between is_connected turning False and the callback
+    duplicate_callback: bool = False  # the callback fires twice, as seen on hardware
+    callback_on_disconnect: bool = False  # our own disconnect call also fires the callback
     write_error: Exception = None
     write_error_at: int = 1
     write_hang_at: int = None
@@ -98,6 +113,7 @@ class FakeLink:
         self.cached_services = cached_services
         self.connected = False
         self.writes = 0
+        self.written = []
 
     async def _behave(self, behavior):
         if behavior == HANG:
@@ -132,12 +148,18 @@ class FakeLink:
         if self.connected:
             self.connected = False
             self.radio.record('dropped')
-            if self.step.fire_callback:
-                self.on_disconnect()
+            if not self.step.fire_callback:
+                return
+            for _ in range(2 if self.step.duplicate_callback else 1):
+                if self.step.callback_delay is None:
+                    self.on_disconnect()
+                else:
+                    asyncio.get_running_loop().call_later(self.step.callback_delay, self.on_disconnect)
 
     async def write(self, data):
         self.writes += 1
         self.radio.record('write', data.hex())
+        self.written.append(data.hex())
         if self.writes == self.step.write_hang_at:
             await asyncio.Event().wait()
         if self.step.write_error is not None and self.writes == self.step.write_error_at:
@@ -149,3 +171,5 @@ class FakeLink:
         self.radio.record('disconnect')
         await self._behave(self.step.disconnect)
         self.connected = False
+        if self.step.callback_on_disconnect:
+            self.on_disconnect()

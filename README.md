@@ -26,6 +26,10 @@ tests that execute them directly are skipped when `legacy/` is absent. See
 
 Tests never open a Bluetooth connection or capture the screen.
 
+Each test has a 30-second wall-clock limit. A test that hangs is named, every thread's
+stack is printed and the run exits with code 3. Simulated Bluetooth scenarios also fail
+if they pass 3600 virtual seconds.
+
 ## Privacy
 
 Never commit device MAC addresses, logs, personal paths, Bluetooth scan output or

@@ -11,7 +11,7 @@ from pathlib import Path
 LOGGER_NAME = 'glowshift.diagnostics'
 _MAC_ADDRESS = re.compile(r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b')
 _USER_PATH = re.compile(r'[A-Za-z]:[\\/]+Users[\\/]+[^\\/"\s]+', re.IGNORECASE)
-_NOT_RECORDED = {'batch_accepted_by_windows'}  # Summarized when each connection closes.
+_NOT_RECORDED = {'batch_accepted_by_windows', 'refresh_accepted_by_windows'}  # Summarized at close.
 
 
 def redact(text):

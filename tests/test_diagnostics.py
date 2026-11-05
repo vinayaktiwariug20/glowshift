@@ -53,8 +53,9 @@ def test_connection_event_is_one_json_record(log_file):
     assert record['detail'] == 'at <device>'
 
 
-def test_per_batch_events_are_not_written(log_file):
-    diagnostics.record_connection_event(ConnectionEvent('batch_accepted_by_windows', 1.0, {}))
+@pytest.mark.parametrize('kind', ['batch_accepted_by_windows', 'refresh_accepted_by_windows'])
+def test_per_batch_events_are_not_written(log_file, kind):
+    diagnostics.record_connection_event(ConnectionEvent(kind, 1.0, {}))
     assert text(log_file) == ''
 
 

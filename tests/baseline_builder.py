@@ -59,6 +59,11 @@ def build_ble_timeline():
     return ble_scenarios.build_timeline_baseline(legacy_loader.load(legacy_loader.AMBIENT))
 
 
+def build_ble_timeline_untied():
+    import ble_scenarios
+    return ble_scenarios.build_untied_baseline(legacy_loader.load(legacy_loader.AMBIENT))
+
+
 def dimming(ambient):
     colors = [(255, 128, 1), (40, 55, 115), (0, 191, 90)]
     return {str(level): _hex(ambient.dim(colors, level)) for level in (0, 1, 5, 33, 65, 100, 150)}

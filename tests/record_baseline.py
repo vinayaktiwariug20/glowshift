@@ -11,7 +11,8 @@ import baseline_builder  # noqa: E402
 
 GOLDEN = Path(__file__).parent / 'golden'
 TARGETS = {'baseline.json': baseline_builder.build, 'sensitivity.json': baseline_builder.build_sensitivity,
-           'ble_timeline.json': baseline_builder.build_ble_timeline}
+           'ble_timeline.json': baseline_builder.build_ble_timeline,
+           'ble_timeline_untied.json': baseline_builder.build_ble_timeline_untied}
 
 
 def main():
