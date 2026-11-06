@@ -142,6 +142,51 @@ def test_disconnect_before_connecting_is_harmless(client):
     asyncio.run(h617a.BleakLink(ADDRESS, lambda: None).disconnect())
 
 
+class FakeRequester:
+    def __init__(self, log):
+        self.log = log
+
+    def remove_gatt_services_changed(self, token):
+        self.log.append(('removed', token))
+
+
+def test_services_changed_handler_is_removed_before_disconnecting(client):
+    link = open_link()
+    fake = client.instances[0]
+    log = []
+    fake._backend = types.SimpleNamespace(_requester=FakeRequester(log), _services_changed_token='token')
+    original = fake.disconnect
+
+    async def disconnect():
+        log.append('disconnect')
+        await original()
+
+    fake.disconnect = disconnect
+    asyncio.run(link.disconnect())
+    assert log == [('removed', 'token'), 'disconnect']
+    assert fake._backend._services_changed_token is None
+
+
+@pytest.mark.parametrize('backend', [None, types.SimpleNamespace(_requester=None, _services_changed_token='t'),
+                                     types.SimpleNamespace(_requester=object(), _services_changed_token='t')],
+                         ids=['no-backend', 'no-requester', 'removal-fails'])
+def test_disconnect_still_happens_when_bleak_internals_differ(client, backend):
+    link = open_link()
+    client.instances[0]._backend = backend
+    asyncio.run(link.disconnect())
+    assert client.instances[0].disconnects == 1
+
+
+def test_installed_bleak_still_leaves_the_handler_registered_on_disconnect():
+    """If a bleak upgrade fixes this or renames the internals, revisit the workaround."""
+    import inspect
+    winrt_client = pytest.importorskip('bleak.backends.winrt.client')
+    source = inspect.getsource(winrt_client.BleakClientWinRT)
+    assert 'self._services_changed_token = self._requester.add_gatt_services_changed(' in source
+    disconnect = inspect.getsource(winrt_client.BleakClientWinRT.disconnect)
+    assert 'remove_gatt_services_changed' not in disconnect
+
+
 def test_manager_drives_the_real_link_class(client):
     client.device = 'device'
 

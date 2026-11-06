@@ -5,8 +5,27 @@ targeting the Govee H617A Bluetooth LED strip (15 segments).
 
 **Status:** pre-release. `src/glowshift` holds the protocol, color analysis, smoothing,
 animations, design files, connection manager and session lifecycle. The connection
-manager has only run against a simulated device so far, and the GUI is not in the
+manager has passed short supervised tests on a physical H617A; the GUI is not in the
 package yet. `python tests/demo_simulated_session.py` demonstrates it without hardware.
+
+## Device address
+
+The strip's Bluetooth address is stored only on your machine, in
+`%LOCALAPPDATA%\GlowShift\settings.json`:
+
+```powershell
+.venv\Scripts\python -m glowshift.settings --set-address <address>
+```
+
+The `GLOWSHIFT_H617A_ADDRESS` environment variable overrides the file. The address is
+never logged or printed.
+
+## Screen capture
+
+If the screen cannot be captured, for example on the lock screen, at a UAC prompt or
+during a display change, capture retries after 1, 2, 4, 8 and then every 10 seconds
+until it works or you stop it. Bluetooth stays connected and the strip keeps its last
+colors meanwhile. Other capture errors still stop the run.
 
 ## Development setup
 

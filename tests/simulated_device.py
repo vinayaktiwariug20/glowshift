@@ -71,6 +71,7 @@ class Step:
     write_error_at: int = 1
     write_hang_at: int = None
     disconnect: object = None         # exception to raise, HANG, or None
+    disconnect_delay: float = None    # seconds our disconnect call takes to finish
 
 
 class FakeRadio:
@@ -170,6 +171,9 @@ class FakeLink:
     async def disconnect(self):
         self.radio.record('disconnect')
         await self._behave(self.step.disconnect)
+        if self.step.disconnect_delay is not None:
+            await asyncio.sleep(self.step.disconnect_delay)
+            self.radio.record('disconnect_finished')
         self.connected = False
         if self.step.callback_on_disconnect:
             self.on_disconnect()

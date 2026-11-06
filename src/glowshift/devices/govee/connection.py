@@ -434,10 +434,21 @@ class ConnectionManager:
                        seconds_since_last_write=self._since_last_write(connection), cause=failure)
         if link is not None:
             self._own_disconnect = failure is not Failure.DISCONNECTED and link.is_connected
-            try:
-                await self._bounded('disconnect', link, link.disconnect(), self.timing.disconnect_timeout)
-            except (Exception, asyncio.CancelledError) as error:
+            disconnect = asyncio.ensure_future(
+                self._bounded('disconnect', link, link.disconnect(), self.timing.disconnect_timeout))
+            stopped = False
+            while not disconnect.done():
+                try:
+                    await asyncio.wait({disconnect})
+                except asyncio.CancelledError:
+                    # Stop arrived mid-disconnect. The disconnect is bounded, so finish it
+                    # rather than abandon it, then stop.
+                    stopped = True
+            error = asyncio.CancelledError() if disconnect.cancelled() else disconnect.exception()
+            if error is not None:
                 self._emit('disconnect_failed', error=type(error).__name__, detail=str(error)[:160])
+            if stopped:
+                raise asyncio.CancelledError
         return lifetime
 
     def _plan_retry(self, failure, lifetime):

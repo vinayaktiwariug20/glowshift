@@ -43,6 +43,25 @@ In one supervised test (one solid color, so one packet per resend), the link sta
 for 31 s with six resends about 5.1 s apart, and the color stayed steady. That is a
 single run; multi-packet patterns were not held.
 
+## "Event loop is closed" after shutdown
+
+In one test bleak logged many "Event loop is closed" errors from its services-changed
+handler after the Bluetooth thread had shut down. In bleak 3.0, the WinRT backend's
+`disconnect()` closes the device without unregistering that handler (only a disconnect
+reported by Windows removes it), so Windows can still call it later. GlowShift now
+removes the handler itself just before disconnecting. This reaches into bleak
+internals: it does nothing if they differ, and a test fails if an installed bleak no
+longer matches. In two supervised runs with this change (three connections, one held
+for 145 s), neither error nor the `unhandled services changed event` warning appeared.
+The day before, without it, the warning appeared once in six connections and the
+loop-closed errors not at all, so this is too little evidence to call it fixed.
+
+## Stop during a disconnect
+
+If Stop arrives while the manager is already disconnecting a dropped link, the
+disconnect is allowed to finish (it is bounded at 5 seconds) instead of being cancelled
+and logged as `disconnect_failed`.
+
 ## Disconnect callbacks
 
 On hardware the callback often arrives after polling has already seen the link drop,
@@ -72,7 +91,8 @@ Callers set a desired power, brightness and color state, and each new connection
 sends the whole state as it is then, so a reconnect never replays superseded commands.
 
 `tools/h617a_hardware_check.py` runs a supervised, stage-by-stage check against a real
-strip. It reads the address from `GLOWSHIFT_H617A_ADDRESS` and never prints it.
+strip. It reads the address from local settings or `GLOWSHIFT_H617A_ADDRESS` and never
+prints it.
 Bluetooth is active only during a stage: a connection lost between stages stops the
 manager instead of leaving it retrying. The whole run ends after `--max-seconds`
 (default 300), and the process always exits.

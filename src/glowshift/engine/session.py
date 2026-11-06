@@ -8,7 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from glowshift.capture.loop import capture_loop, open_screen
+from glowshift.capture.loop import capture_with_retry, open_screen
 from glowshift.devices.govee.connection import BluetoothWorker, ConnectionManager, ConnectionState
 
 logger = logging.getLogger('glowshift.session')
@@ -97,10 +97,25 @@ class Session:
                 run.worker.manager.publish(colors)
             self._sink(SessionEvent(run.id, 'preview', {'colors': colors}))
 
+        streak = 0
+
+        def on_started():
+            nonlocal streak
+            if streak:
+                logger.info('Screen capture resumed after %d failed attempt(s)', streak)
+                streak = 0
+            self._sink(SessionEvent(run.id, 'capture', {'text': 'Capturing screen'}))
+
+        def on_unavailable(error, wait):
+            nonlocal streak
+            streak += 1
+            if streak == 1:  # One record per outage; a lock screen can last hours.
+                logger.warning('Screen capture unavailable, retrying: %s', error)
+            self._sink(SessionEvent(run.id, 'capture', {
+                'text': f'Screen unavailable; retrying in {wait:g} s'}))
+
         try:
-            capture_loop(run.options, run.stop, on_colors,
-                         lambda: self._sink(SessionEvent(run.id, 'capture', {'text': 'Capturing screen'})),
-                         self._screen_factory)
+            capture_with_retry(run.options, run.stop, on_colors, on_started, on_unavailable, self._screen_factory)
         except Exception:
             logger.exception('Capture worker failed')
             self._sink(SessionEvent(run.id, 'capture_failed'))

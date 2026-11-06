@@ -22,17 +22,39 @@ class CaptureOptions:
     spatial_mapping: str
 
 
+RETRY_DELAYS = (1.0, 2.0, 4.0, 8.0, 10.0)  # The last delay repeats.
+
+
+class ScreenUnavailable(RuntimeError):
+    """Opening or grabbing the screen failed, as during a lock screen, a UAC prompt or
+    a display change. Usually temporary."""
+
+
 def open_screen():
     import mss
     return mss.mss()
 
 
+def _open(screen_factory):
+    try:
+        return screen_factory()
+    except Exception as error:
+        raise ScreenUnavailable(f'Opening the screen failed: {type(error).__name__}: {error}') from error
+
+
+def _grab(screen, monitor):
+    try:
+        return screen.grab(monitor)
+    except Exception as error:
+        raise ScreenUnavailable(f'Screen grab failed: {type(error).__name__}: {error}') from error
+
+
 def capture_loop(options, stop, on_colors, on_started=lambda: None, screen_factory=open_screen,
                  clock=time.monotonic):
-    with screen_factory() as screen:
+    with _open(screen_factory) as screen:
         monitors = screen.monitors[1:]
         if options.monitor >= len(monitors):
-            raise RuntimeError('Selected monitor no longer exists')
+            raise ScreenUnavailable('Selected monitor no longer exists')
         monitor = monitors[options.monitor]
         smoother = ColorSmoother(options.transition)
         target = None
@@ -42,7 +64,7 @@ def capture_loop(options, stop, on_colors, on_started=lambda: None, screen_facto
         while not stop.is_set():
             now = clock()
             if now - last_sample >= options.interval:
-                frame = np.asarray(screen.grab(monitor))
+                frame = np.asarray(_grab(screen, monitor))
                 target = np.array(analyze_frame(
                     frame, options.multicolor, options.saturation_boost, options.minimum_saturation,
                     options.minimum_value, options.color_mode, options.spatial_mapping), dtype=np.float64)
@@ -51,3 +73,35 @@ def capture_loop(options, stop, on_colors, on_started=lambda: None, screen_facto
                 on_colors(dim(smoother.update(target, now - last_tick), options.brightness))
             last_tick = now
             stop.wait(.15)
+
+
+def capture_with_retry(options, stop, on_colors, on_started=lambda: None, on_unavailable=lambda error, wait: None,
+                       screen_factory=open_screen, clock=time.monotonic):
+    """Run ``capture_loop``, reopening the screen after ``ScreenUnavailable`` until stopped.
+
+    Other errors, such as a failure in color analysis, still end the capture. While the
+    screen is unavailable nothing is published, so the strip keeps its last colors.
+    ``on_started`` is called on the first published colors after each (re)start, since
+    opening the screen does not mean grabs will succeed.
+    """
+    failures = 0
+    started = False
+
+    def colors(values):
+        nonlocal failures, started
+        if not started:
+            started = True
+            on_started()
+        failures = 0
+        on_colors(values)
+
+    while not stop.is_set():
+        started = False
+        try:
+            capture_loop(options, stop, colors, screen_factory=screen_factory, clock=clock)
+            return
+        except ScreenUnavailable as error:
+            wait = RETRY_DELAYS[min(failures, len(RETRY_DELAYS) - 1)]
+            failures += 1
+            on_unavailable(error, wait)
+            stop.wait(wait)

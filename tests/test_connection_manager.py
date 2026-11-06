@@ -316,6 +316,17 @@ def test_stop_with_a_hanging_disconnect_is_bounded():
     assert kinds(events, 'disconnect_failed')
 
 
+def test_stop_during_our_disconnect_lets_it_finish():
+    """Seen on hardware: Stop arrived while the manager was disconnecting a dropped link."""
+    _, radio, events = scenario([Step(drop_after_seconds=1, disconnect_delay=2)], 2)
+    finished = radio.operations('disconnect_finished')
+    assert len(finished) == 1
+    assert kinds(events, 'disconnect_failed') == []
+    assert kinds(events, 'stopped')[0].time == pytest.approx(finished[0][0])
+    assert len(radio.links) == 1
+    assert states(events)[-2:] == [S.STOPPING, S.DISCONNECTED]
+
+
 def test_stop_holds_even_if_a_call_swallows_cancellation():
     radio = FakeRadio([Step()])
     events = []

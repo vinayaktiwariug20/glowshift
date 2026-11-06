@@ -1,4 +1,5 @@
 """Session lifecycle, worker shutdown and status. Runs real threads with fake devices."""
+import logging
 import threading
 import time
 
@@ -16,6 +17,31 @@ from simulated_device import HANG, IGNORE_CANCEL, FakeRadio, Step
 class FailingScreen(FakeScreen):
     def grab(self, monitor):
         raise RuntimeError('BitBlt')
+
+
+class BrokenFrameScreen(FakeScreen):
+    """Grabs succeed but analysis fails: not a screen problem, so not retried."""
+    def grab(self, monitor):
+        return np.zeros(3, np.uint8)
+
+
+class FlakyScreen(FakeScreen):
+    """The first ``failures`` grabs fail, as during a lock screen."""
+    def __init__(self, failures):
+        super().__init__([dark_blue_cave()])
+        self.failures = failures
+
+    def grab(self, monitor):
+        if self.failures:
+            self.failures -= 1
+            raise RuntimeError('BitBlt')
+        return super().grab(monitor)
+
+
+@pytest.fixture
+def quick_retry(monkeypatch):
+    from glowshift.capture import loop
+    monkeypatch.setattr(loop, 'RETRY_DELAYS', (.01, .02))
 
 
 class Harness:
@@ -98,7 +124,7 @@ def test_final_status_does_not_depend_on_thread_liveness():
 
 
 def test_capture_failure_message_survives_the_exit_event(harness):
-    item = harness(screen=FailingScreen())
+    item = harness(screen=BrokenFrameScreen())
     item.start(connect=False)
     item.wait_for(lambda: item.model.capture == 'Capture failed; see log' and not item.model._waiting)
     assert item.model.message == 'Screen capture failed. See diagnostic log.'
@@ -213,11 +239,56 @@ def test_status_text_never_claims_delivery(harness):
     assert 'device delivery not confirmed' in item.model.bluetooth
 
 
-def test_capture_failure_stops_bluetooth_as_the_prototype_did(harness):
-    item = harness(FakeRadio([Step()]), FailingScreen())
+def test_analysis_failure_stops_bluetooth_as_the_prototype_did(harness):
+    item = harness(FakeRadio([Step()]), BrokenFrameScreen())
     item.start()
     item.wait_for(lambda: not item.model._waiting)
     assert item.model.message == 'Screen capture failed. See diagnostic log.'
+
+
+# Screen failures are retried (deliberate difference: the prototype stopped)
+
+def test_capture_resumes_after_the_screen_comes_back(harness, quick_retry):
+    radio = FakeRadio([Step()])
+    item = harness(radio, FlakyScreen(failures=3))
+    item.start()
+    item.wait_for_more_previews()
+    texts = [event.data['text'] for event in item.events if event.kind == 'capture']
+    assert texts[:4] == ['Screen unavailable; retrying in 0.01 s', 'Screen unavailable; retrying in 0.02 s',
+                         'Screen unavailable; retrying in 0.02 s', 'Capturing screen']
+    assert item.model.message == 'Screen sync running.'
+    assert item.count('capture_failed') == 0
+
+
+def test_bluetooth_stays_up_while_the_screen_is_unavailable(harness, quick_retry):
+    radio = FakeRadio([Step()])
+    item = harness(radio, FailingScreen())
+    item.start()
+    item.wait_for(lambda: item.count('capture') >= 5)
+    assert item.model.capture.startswith('Screen unavailable')
+    assert item.model.message == 'Screen sync running.'
+    assert item.session._run.worker.thread.is_alive()
+    assert radio.operations('disconnect') == []
+
+
+def test_stop_ends_a_capture_that_is_waiting_to_retry(harness):
+    item = harness(screen=FailingScreen())  # Real delays: the first wait is 1 s.
+    item.start(connect=False)
+    item.wait_for(lambda: item.count('capture') >= 1)
+    started = time.monotonic()
+    assert item.session.close() is True
+    assert time.monotonic() - started < .5
+    assert item.model.message == 'Stopped. You can start again.'
+
+
+def test_one_log_record_per_screen_outage(harness, quick_retry, caplog):
+    caplog.set_level(logging.INFO, logger='glowshift.session')
+    item = harness(screen=FlakyScreen(failures=4))
+    item.start(connect=False)
+    item.wait_for_more_previews()
+    records = [record.getMessage() for record in caplog.records if record.name == 'glowshift.session']
+    assert len([text for text in records if 'unavailable' in text]) == 1
+    assert 'Screen capture resumed after 4 failed attempt(s)' in records
 
 
 # Shutdown leaves no workers

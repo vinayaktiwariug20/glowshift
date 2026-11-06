@@ -1,8 +1,9 @@
 """Bleak link for the H617A, used by ConnectionManager.
 
-Not yet run against a physical strip. All connection logic lives in connection.py.
+All connection logic lives in connection.py.
 """
 import functools
+import logging
 
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakBluetoothNotAvailableError, BleakCharacteristicNotFoundError
@@ -10,6 +11,8 @@ from bleak.exc import BleakBluetoothNotAvailableError, BleakCharacteristicNotFou
 from glowshift.devices.govee.connection import (DeviceNotFound, RadioOff, ServiceDiscoveryFailed,
                                                 StaleCharacteristic)
 from glowshift.devices.govee.protocol import WRITE_UUID
+
+logger = logging.getLogger('glowshift.h617a')
 
 SCAN_TIMEOUT = 12
 CLIENT_TIMEOUT = 18
@@ -56,7 +59,29 @@ class BleakLink:
 
     async def disconnect(self):
         if self._client is not None:
+            forget_services_changed_handler(self._client)
             await self._client.disconnect()
+
+
+def forget_services_changed_handler(client):
+    """Unregister bleak's services-changed handler before disconnecting.
+
+    bleak 3.0's WinRT ``disconnect()`` closes the device without removing this handler,
+    so Windows can still call it afterwards; after the Bluetooth thread's event loop has
+    closed, that logs "Event loop is closed" errors. This reaches into bleak internals,
+    so it does nothing when they are not as expected.
+    """
+    backend = getattr(client, '_backend', None)
+    requester = getattr(backend, '_requester', None)
+    token = getattr(backend, '_services_changed_token', None)
+    if requester is None or token is None:
+        return
+    try:
+        requester.remove_gatt_services_changed(token)
+    except Exception as error:
+        logger.debug('Could not remove the services-changed handler: %r', error)
+        return
+    backend._services_changed_token = None
 
 
 def link_factory(address):

@@ -17,8 +17,8 @@ for the next stage, the manager is stopped ("parked") rather than left retrying,
 and the next stage reconnects. The whole run ends after --max-seconds (default 300)
 whatever happens, and the process always exits.
 
-The device address comes from the GLOWSHIFT_H617A_ADDRESS environment variable and
-is never printed. Events are redacted and logged to the local diagnostics folder.
+The device address comes from local settings (see glowshift.settings) or the
+GLOWSHIFT_H617A_ADDRESS environment variable, and is never printed. Events are redacted and logged to the local diagnostics folder.
 Uses only the package's packets and timing; no other commands are sent.
 """
 import argparse
@@ -30,7 +30,7 @@ import threading
 import time
 from pathlib import Path
 
-from glowshift import diagnostics
+from glowshift import diagnostics, settings
 from glowshift.devices.govee.connection import BluetoothWorker, ConnectionManager, ConnectionState
 from glowshift.devices.govee.h617a import link_factory
 
@@ -245,9 +245,10 @@ def main():
     parser.add_argument('--control', required=True, type=Path, help='folder watched for a file named "next"')
     parser.add_argument('--max-seconds', type=float, default=300.0, help='hard limit for the whole run')
     args = parser.parse_args()
-    address = os.environ.get('GLOWSHIFT_H617A_ADDRESS')
+    address = settings.device_address()
     if not address:
-        sys.exit('Set GLOWSHIFT_H617A_ADDRESS first.')
+        sys.exit('No device address. Run "python -m glowshift.settings --set-address ..." '
+                 f'or set {settings.ADDRESS_VARIABLE}.')
     handler = diagnostics.configure()
     say(f'Diagnostics log: {handler.baseFilename}')
     check = Check(link_factory(address))
@@ -264,6 +265,9 @@ def main():
             time.sleep(.2)
             continue
         name = command.read_text(encoding='utf-8').strip()
+        if not name:  # Still being written.
+            time.sleep(.2)
+            continue
         command.unlink()
         if name not in STAGES:
             say(f'Unknown stage: {name}')
