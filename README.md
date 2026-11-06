@@ -1,58 +1,103 @@
 # GlowShift
 
-Open-source Windows application for screen-reactive RGB lighting, currently
-targeting the Govee H617A Bluetooth LED strip (15 segments).
+Screen-reactive RGB lighting for Windows. GlowShift reads the colours on your screen
+and paints them, segment by segment, onto a **Govee H617A** Bluetooth LED strip
+(15 segments). It also has a small studio for painting the strip by hand and running
+animations.
 
-**Status:** pre-release. `src/glowshift` holds the protocol, color analysis, smoothing,
-animations, design files, connection manager, session lifecycle and the GUI. The
-connection manager has passed short supervised tests on a physical H617A.
-`python tests/demo_simulated_session.py` demonstrates it without hardware.
+**Status:** alpha (0.1.0). Tested on Windows 10 with Python 3.14 and one H617A.
+Other Govee models are not supported.
 
-## Running
+> GlowShift is an independent project. It is not affiliated with, endorsed by or
+> supported by Govee. "Govee" is a trademark of its owner and is used here only to
+> name the hardware this works with.
+
+## Requirements
+
+- Windows 10 or 11 with Bluetooth Low Energy
+- Python 3.14
+- A Govee H617A strip, switched on and **not** connected to the Govee Home app at the
+  same time (the strip accepts one Bluetooth connection)
+
+## Install and run
 
 ```powershell
-$env:PYTHONPATH = 'src'
-.venv\Scripts\python -m glowshift
+git clone <repository-url> glowshift
+cd glowshift
+py -3.14 -m venv .venv
+.venv\Scripts\python -m pip install --only-binary :all: -e .
+.venv\Scripts\glowshift
 ```
 
-One window with two tabs:
+`.venv\Scripts\python -m glowshift` works too.
 
-- **Screen sync** is GlowShift Ambient v3.5.1, with the same controls and defaults,
-  except that it starts in Atmospheric mode (tuning unchanged: saturation boost 1.5,
-  minimum saturation 0.60, minimum intensity 0.75).
-- **Studio** is Govee H617A Studio v5: paint segments, save and load designs, power,
-  brightness and animations.
+### Strip address
 
-Only one of them uses the strip at a time. Starting screen sync with "Send colors to
-physical strip" disconnects Studio first; Studio's strip actions wait while screen
-sync is sending. Preview-only screen sync and Studio can run together.
-
-Differences from the old apps: Studio's live painting sends the whole design rather
-than one packet per click, and rapid clicks are combined; Studio animations keep
-Studio v5's pace (up to about 4 updates a second, at least 0.1 s after each update),
-while screen sync keeps its 1.2-second minimum. Brightness set in Studio is the strip's
-own setting and stays in effect during screen sync, as it did with the old apps.
-
-## Device address
-
-The strip's Bluetooth address is stored only on your machine, in
-`%LOCALAPPDATA%\GlowShift\settings.json`:
+GlowShift connects to your strip by its Bluetooth address, which looks like
+`AA:BB:CC:DD:EE:FF`. The Govee Home app may show it among the device's details, and any
+Bluetooth LE scanner app lists it next to the strip's name. Enter it in the **Strip
+address** field at the top of the window and press **Save address**, or run:
 
 ```powershell
 .venv\Scripts\python -m glowshift.settings --set-address <address>
 ```
 
-The `GLOWSHIFT_H617A_ADDRESS` environment variable overrides the file. The address is
-never logged or printed.
+The address is stored only on your machine, in
+`%LOCALAPPDATA%\GlowShift\settings.json`. The `GLOWSHIFT_H617A_ADDRESS` environment
+variable overrides the file. The app never shows, prints or logs the address.
 
-## Screen capture
+## Using it
 
-If the screen cannot be captured, for example on the lock screen, at a UAC prompt or
-during a display change, capture retries after 1, 2, 4, 8 and then every 10 seconds
-until it works or you stop it. Bluetooth stays connected and the strip keeps its last
-colors meanwhile. Other capture errors still stop the run.
+One window with two tabs. Only one of them uses the strip at a time.
 
-## Development setup
+**Screen sync** captures a monitor and sends its colours to the strip. It starts in
+**Atmospheric** mode, which favours the overall mood of the scene. The other modes are
+**Dominant colors** and **Spatial (5x3)**, which maps screen regions to segments. Leave "Send colors to physical strip" off
+to preview without Bluetooth.
+
+**Studio** lets you paint each of the 15 segments, save and load designs, set power and
+brightness, and run animations (about 4 updates a second).
+
+Starting screen sync with the strip enabled disconnects Studio first. Studio's strip
+controls are refused while screen sync is sending. Preview-only screen sync and Studio
+can run together. Brightness set in Studio is the strip's own setting and stays in
+effect during screen sync.
+
+### What to expect from Bluetooth
+
+- Screen sync updates the strip at most every 1.2 seconds. That limit keeps the H617A
+  responsive over Windows Bluetooth; it is not meant for fast flicker effects.
+- If the strip goes out of range or is switched off, GlowShift reconnects on its own.
+  Unchanged colours are resent after 5 seconds without updates.
+- The status line says when Windows **accepted** a write. The H617A does not confirm
+  delivery, so that is not proof the strip changed colour.
+- If the screen cannot be captured (lock screen, UAC prompt, display change), capture
+  retries after 1, 2, 4, 8 and then every 10 seconds. The strip keeps its last colours
+  meanwhile.
+
+See [Windows Bluetooth notes](docs/windows-bluetooth-notes.md) for known Windows
+Bluetooth behaviour and troubleshooting.
+
+## Diagnostics
+
+GlowShift writes a diagnostic log to `%LOCALAPPDATA%\GlowShift\logs\glowshift.log`
+(rotated, at most about 12 MB). Device addresses and your user folder are redacted
+before anything is written. Logs never leave your machine. Please read a log
+before attaching it to an issue.
+
+## Experimental: adaptive palette
+
+`glowshift.analysis.experimental.adaptive` is an offline prototype that turns a single
+image into 15 ordered LED colours. The app does not use it. It needs Pillow
+(`pip install -e .[experimental]`):
+
+```powershell
+.venv\Scripts\python -m glowshift.analysis.experimental.adaptive screenshot.png --output palette.png
+```
+
+Known defect: images narrower than the number of slices produce invalid (NaN) colours.
+
+## Development
 
 ```powershell
 py -3.14 -m venv .venv
@@ -60,26 +105,28 @@ py -3.14 -m venv .venv
 .venv\Scripts\python -m pytest
 ```
 
-## Tests
+`requirements.txt` pins the exact versions the project is tested with; `pyproject.toml`
+holds the supported ranges.
 
-`tests/golden/baseline.json` records the exact output of the original prototypes
-on synthetic scenes, and the package tests check against it without needing the
-prototypes. The prototypes are kept locally in `legacy/` and are not published, so
-tests that execute them directly are skipped when `legacy/` is absent. See
-[tests/golden/README.md](tests/golden/README.md) for how the baseline is maintained.
+The tests never open a Bluetooth connection or capture the screen. Bluetooth is
+simulated (`tests/simulated_device.py`), and the screen is replaced with synthetic
+scenes. Each test has a 30-second wall-clock limit; a test that hangs is named, every
+thread's stack is printed and the run exits with code 3.
 
-Tests never open a Bluetooth connection or capture the screen.
+`tests/golden/` records the exact output of the original prototypes on synthetic scenes,
+so behaviour changes are caught without the prototypes. Tests that run the prototypes
+directly are skipped when they are absent. See
+[tests/golden/README.md](tests/golden/README.md).
 
-Each test has a 30-second wall-clock limit. A test that hangs is named, every thread's
-stack is printed and the run exits with code 3. Simulated Bluetooth scenarios also fail
-if they pass 3600 virtual seconds.
+`tools/h617a_hardware_check.py` is a supervised, stage-by-stage check against a real
+strip. It sends nothing until you start each stage.
 
-## Privacy
+### Privacy
 
-Never commit device MAC addresses, logs, personal paths, Bluetooth scan output or
-real screenshots. Test fixtures are generated synthetically.
-`tests/test_privacy.py` checks every tracked file.
+Never commit device addresses, logs, personal paths, Bluetooth scan output or real
+screenshots. Test fixtures are synthetic. `tests/test_privacy.py` checks every tracked
+file; the only address allowed is the placeholder `AA:BB:CC:DD:EE:FF`.
 
-## Notes
+## License
 
-- [Windows Bluetooth diagnostic notes](docs/windows-bluetooth-notes.md)
+[MIT](LICENSE)
