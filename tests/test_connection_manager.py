@@ -189,6 +189,74 @@ async def _publish_later(manager, seconds):
     manager.publish(COLORS)
 
 
+# Studio animation pacing
+
+def solid(level):
+    return [(level, 0, 0)] * 15
+
+
+def rainbow(level):
+    return [(level, index, 0) for index in range(15)]  # 15 colors: 15 packets per frame.
+
+
+def animate(frame, seconds, rate=4.0, animated=True):
+    async def feed(manager, radio):
+        async def frames():
+            for number in range(int(seconds * rate)):
+                manager.publish(frame(number + 1), animated)
+                await asyncio.sleep(1 / rate)
+        asyncio.ensure_future(frames())
+    return feed
+
+
+def batch_starts(radio, size):
+    moments = [entry[0] for entry in radio.operations('write')]
+    return moments[::size]
+
+
+def test_one_packet_animation_frames_go_out_at_studio_rate():
+    _, radio, _ = scenario([Step()], 5, colors=None, timing=NO_REFRESH, feed=animate(solid, 4))
+    starts = batch_starts(radio, 1)
+    gaps = [later - earlier for earlier, later in zip(starts, starts[1:])]
+    assert len(starts) >= 14  # About 4 frames per second, against 1 every 1.2 s for screen sync.
+    assert all(.25 - .03 <= gap <= .25 + .03 for gap in gaps[2:])
+
+
+def test_large_animation_frames_wait_at_least_studio_minimum_after_each_frame():
+    _, radio, _ = scenario([Step()], 6, colors=None, timing=NO_REFRESH, feed=animate(rainbow, 5))
+    moments = [entry[0] for entry in radio.operations('write')]
+    ends = moments[14::15]
+    starts = moments[15::15]
+    pauses = [start - end for end, start in zip(ends, starts)]
+    assert pauses and all(.065 + .10 - 1e-6 <= pause <= .065 + .10 + .02 + 1e-6 for pause in pauses)
+    # Packets within a frame keep the 65 ms gap.
+    assert {round(later - earlier, 3) for earlier, later in zip(moments[:15], moments[1:15])} == {.065}
+
+
+def test_screen_sync_frames_keep_the_1_2_second_minimum():
+    _, radio, _ = scenario([Step()], 5, colors=None, timing=NO_REFRESH, feed=animate(solid, 4, animated=False))
+    starts = batch_starts(radio, 1)
+    gaps = [later - earlier for earlier, later in zip(starts, starts[1:])]
+    assert gaps and min(gaps) >= .065 + 1.2 - 1e-6
+
+
+def test_pacing_follows_the_latest_publish():
+    async def feed(manager, radio):
+        async def frames():
+            for number in range(8):  # 2 s animated, then screen-sync pacing again.
+                manager.publish(solid(number + 1), animated=True)
+                await asyncio.sleep(.25)
+            for number in range(8):
+                manager.publish(solid(100 + number), animated=False)
+                await asyncio.sleep(.25)
+        asyncio.ensure_future(frames())
+
+    _, radio, _ = scenario([Step()], 6, colors=None, timing=NO_REFRESH, feed=feed)
+    starts = batch_starts(radio, 1)
+    late = [moment for moment in starts if moment - 1000.0 > 2.6]
+    assert len(late) <= 2 and all(later - earlier >= 1.2 for earlier, later in zip(late, late[1:]))
+
+
 def test_backoff_sequence_matches_prototype():
     backoff = Backoff(Timing())
     assert [backoff.next_wait() for _ in range(7)] == pytest.approx([3.0, 5.4, 9.72, 17.496, 60.0, 60.0, 60.0])

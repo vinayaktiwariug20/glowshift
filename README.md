@@ -4,9 +4,34 @@ Open-source Windows application for screen-reactive RGB lighting, currently
 targeting the Govee H617A Bluetooth LED strip (15 segments).
 
 **Status:** pre-release. `src/glowshift` holds the protocol, color analysis, smoothing,
-animations, design files, connection manager and session lifecycle. The connection
-manager has passed short supervised tests on a physical H617A; the GUI is not in the
-package yet. `python tests/demo_simulated_session.py` demonstrates it without hardware.
+animations, design files, connection manager, session lifecycle and the GUI. The
+connection manager has passed short supervised tests on a physical H617A.
+`python tests/demo_simulated_session.py` demonstrates it without hardware.
+
+## Running
+
+```powershell
+$env:PYTHONPATH = 'src'
+.venv\Scripts\python -m glowshift
+```
+
+One window with two tabs:
+
+- **Screen sync** is GlowShift Ambient v3.5.1, with the same controls and defaults,
+  except that it starts in Atmospheric mode (tuning unchanged: saturation boost 1.5,
+  minimum saturation 0.60, minimum intensity 0.75).
+- **Studio** is Govee H617A Studio v5: paint segments, save and load designs, power,
+  brightness and animations.
+
+Only one of them uses the strip at a time. Starting screen sync with "Send colors to
+physical strip" disconnects Studio first; Studio's strip actions wait while screen
+sync is sending. Preview-only screen sync and Studio can run together.
+
+Differences from the old apps: Studio's live painting sends the whole design rather
+than one packet per click, and rapid clicks are combined; Studio animations keep
+Studio v5's pace (up to about 4 updates a second, at least 0.1 s after each update),
+while screen sync keeps its 1.2-second minimum. Brightness set in Studio is the strip's
+own setting and stays in effect during screen sync, as it did with the old apps.
 
 ## Device address
 

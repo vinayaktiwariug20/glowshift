@@ -1,8 +1,8 @@
-"""Baseline for the planned switch of the GUI default to Atmospheric.
+"""The switch of the GUI default to Atmospheric.
 
-The prototypes stay unchanged, so these tests pin today's behavior. The switch
-itself lands with the new GUI, and must only change the selected mode: not the
-tuning, and not what Atmospheric produces.
+The prototypes stay unchanged, so these tests pin their behavior. The new GUI only
+changes the selected mode, not the tuning and not what Atmospheric produces; see
+tests/test_gui_app.py::test_screen_sync_defaults_are_ambient_v3_5_1_except_atmospheric.
 """
 import baseline_builder
 from scenes import SCENES

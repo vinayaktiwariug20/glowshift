@@ -1,4 +1,5 @@
 import faulthandler
+import gc
 import json
 import os
 import sys
@@ -56,6 +57,18 @@ def no_real_hardware():
     patch.setattr(mss, 'mss', forbidden)
     yield
     patch.undo()
+
+
+@pytest.fixture(autouse=True)
+def collect_closed_windows():
+    """Free closed Tk windows on the main thread.
+
+    Their Tk variables sit in reference cycles. Collected later on a Bluetooth worker
+    thread, each Tk call would block that thread for about a second.
+    """
+    yield
+    if legacy_loader._tk_root is not None:
+        gc.collect()
 
 
 @pytest.fixture(scope='session')

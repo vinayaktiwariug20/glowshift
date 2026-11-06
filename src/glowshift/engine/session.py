@@ -56,6 +56,12 @@ class Session:
         self._run = None
         self._next_id = 0
 
+    @property
+    def using_bluetooth(self):
+        """True while the current run's Bluetooth worker is running, including while it stops."""
+        run = self._run
+        return run is not None and run.worker is not None and run.worker.thread.is_alive()
+
     def start(self, options, connect):
         """Start a new run. Returns its id, or None while the previous run is exiting."""
         current = self._run

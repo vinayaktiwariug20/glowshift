@@ -122,6 +122,11 @@ class Timing:
     # so unchanged colors are resent after this long. Same segment packets as any
     # batch; no other command. None turns it off, as in the prototype.
     refresh_after_idle: float = 5.0
+    # Studio animation frames, from Studio v5: it waited at least 0.1 s after a frame's
+    # packets before the next frame, at up to 4 frames per second (the animator sets
+    # the frame rate). Polled faster so frames are not held back by ``poll``.
+    animation_interval: float = .10
+    animation_poll: float = .02
 
 
 class Backoff:
@@ -172,6 +177,7 @@ class ConnectionManager:
         self.batches_accepted_by_windows = 0
         self._lock = threading.Lock()
         self._latest = None
+        self._animated = False
         self._power = None
         self._brightness = None
         self._in_flight = None
@@ -189,9 +195,11 @@ class ConnectionManager:
         self._abandoned = set()  # Calls that outlived their deadline, kept until they finish.
 
     # Thread-safe inputs. Each is latest-wins and is sent again after a reconnect.
-    def publish(self, colors):
+    def publish(self, colors, animated=False):
+        """Set the segment colors. ``animated`` frames use Studio's faster pacing."""
         with self._lock:
             self._latest = colors
+            self._animated = animated
 
     def set_power(self, on):
         with self._lock:
@@ -204,6 +212,14 @@ class ConnectionManager:
     def _desired(self):
         with self._lock:
             return self._power, self._brightness, self._latest
+
+    def _pacing(self):
+        """Minimum gap after a segment batch, and the poll interval, for the current colors."""
+        with self._lock:
+            animated = self._animated
+        if animated:
+            return self.timing.animation_interval, self.timing.animation_poll
+        return self.timing.minimum_batch_interval, self.timing.poll
 
     def request_stop(self):
         """Mark the manager as stopping. Backs up cancellation, which a call can swallow."""
@@ -291,14 +307,14 @@ class ConnectionManager:
             if self._link_lost or not link.is_connected:
                 raise _LinkLost('Device disconnected')
             power, brightness, colors = self._desired()
+            interval, poll = self._pacing()
             if power is not None and power != sent_power:
                 await self._write_batch(link, 'power', [power_packet(power)], self.timing.command_gap)
                 sent_power = power
             if brightness is not None and brightness != sent_brightness:
                 await self._write_batch(link, 'brightness', [brightness_packet(brightness)], self.timing.command_gap)
                 sent_brightness = brightness
-            if colors is not None and colors != last_colors \
-                    and self._now() - last_sent >= self.timing.minimum_batch_interval:
+            if colors is not None and colors != last_colors and self._now() - last_sent >= interval:
                 commands = grouped_packets(colors)
                 await self._write_batch(link, 'segments', commands, self.timing.packet_gap)
                 last_colors = colors
@@ -314,7 +330,7 @@ class ConnectionManager:
                 self._connection.refreshes += 1
                 self._emit('refresh_accepted_by_windows', packets=len(commands),
                            connection=self._connection.number, acknowledged_by_device=False)
-            await asyncio.sleep(self.timing.poll)
+            await asyncio.sleep(poll)
 
     def _refresh_due(self):
         idle = self.timing.refresh_after_idle
