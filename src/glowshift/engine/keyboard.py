@@ -8,6 +8,7 @@ it says so and tries again every ``RETRY_SECONDS``.
 import logging
 import threading
 import time
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -24,23 +25,42 @@ RETRY_SECONDS = 5.0
 DEFAULT_GRID = (6, 19)  # Used for the preview until a keyboard's layout is known.
 
 
+@dataclass(frozen=True)
+class KeyboardSource:
+    """What the keyboard shows: part of the screen as a mini screen, or the strip's colours."""
+    kind: str  # 'screen' or 'strip'
+    band: tuple = (0.0, 1.0)
+
+
+WHOLE_SCREEN = KeyboardSource('screen', (0.0, 1.0))
+LOWER_HALF = KeyboardSource('screen', (0.5, 1.0))  # A keyboard usually sits below the screen.
+MATCH_STRIP = KeyboardSource('strip')
+
+
+def strip_grid(colors, rows, columns):
+    """Spread the strip's colours across the columns, left to right, the same on every row."""
+    line = [tuple(colors[column * len(colors) // columns]) for column in range(columns)]
+    return [list(line) for _ in range(rows)]
+
+
 def default_client_factory():
     return OpenRGBClient(name='GlowShift')
 
 
 class KeyboardWorker:
     def __init__(self, options, on_status, on_preview, client_factory=default_client_factory,
-                 clock=time.monotonic, band=(0.0, 1.0), on_exit=lambda crashed: None):
+                 clock=time.monotonic, source=WHOLE_SCREEN, on_exit=lambda crashed: None):
         self.options = options
+        self.source = source
         self._on_status = on_status
         self._on_preview = on_preview
         self._on_exit = on_exit
         self._client_factory = client_factory
         self._clock = clock
-        self._band = band
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._frame = None
+        self._strip = None
         self.thread = threading.Thread(target=self._main, name='glowshift-keyboard', daemon=True)
 
     def start(self):
@@ -54,10 +74,20 @@ class KeyboardWorker:
         with self._lock:
             self._frame = frame
 
+    def offer_strip(self, colors):
+        """Called by capture with the strip's colours, already smoothed and dimmed."""
+        with self._lock:
+            self._strip = colors
+
     def _take_frame(self):
         with self._lock:
             frame, self._frame = self._frame, None
         return frame
+
+    def _take_strip(self):
+        with self._lock:
+            colors, self._strip = self._strip, None
+        return colors
 
     def _connect(self):
         client = self._client_factory()
@@ -85,7 +115,7 @@ class KeyboardWorker:
         client = layout = None
         rows, columns = DEFAULT_GRID
         smoother = ColorSmoother(options.transition)
-        target = sent = shown = None
+        target = sent = shown = grid = last_strip = None
         retry_at = self._clock()
         last_tick = self._clock()
         try:
@@ -103,14 +133,20 @@ class KeyboardWorker:
                         if (layout.rows, layout.columns) != (rows, columns):
                             rows, columns = layout.rows, layout.columns
                             smoother, target = ColorSmoother(options.transition), None
-                frame = self._take_frame()
-                if frame is not None:
-                    grid = grid_colors(frame, rows, columns, options.saturation_boost, options.minimum_saturation,
-                                       options.minimum_value, *self._band)
-                    target = np.array([color for row in grid for color in row], dtype=np.float64)
-                if target is not None:
-                    flat = dim(smoother.update(target, now - last_tick), options.brightness)
-                    grid = [flat[row * columns:(row + 1) * columns] for row in range(rows)]
+                if self.source.kind == 'strip':
+                    last_strip = self._take_strip() or last_strip
+                    if last_strip is not None:
+                        grid = strip_grid(last_strip, rows, columns)
+                else:
+                    frame = self._take_frame()
+                    if frame is not None:
+                        cells = grid_colors(frame, rows, columns, options.saturation_boost,
+                                            options.minimum_saturation, options.minimum_value, *self.source.band)
+                        target = np.array([color for row in cells for color in row], dtype=np.float64)
+                    if target is not None:
+                        flat = dim(smoother.update(target, now - last_tick), options.brightness)
+                        grid = [flat[row * columns:(row + 1) * columns] for row in range(rows)]
+                if grid is not None:
                     if grid != shown:
                         shown = grid
                         self._on_preview(grid)

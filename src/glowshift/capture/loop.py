@@ -20,9 +20,20 @@ class CaptureOptions:
     minimum_value: float
     color_mode: str
     spatial_mapping: str
+    strip_band: tuple = (0.0, 1.0)  # Part of the screen the strip shows, top to bottom (0 to 1).
 
 
 RETRY_DELAYS = (1.0, 2.0, 4.0, 8.0, 10.0)  # The last delay repeats.
+WHOLE_SCREEN = (0.0, 1.0)
+UPPER_HALF = (0.0, 0.5)
+
+
+def band(frame, rows):
+    """The horizontal band ``rows`` (fractions, top to bottom) of a frame; the frame itself if whole."""
+    if tuple(rows) == WHOLE_SCREEN:
+        return frame
+    height = frame.shape[0]
+    return frame[int(height * rows[0]):int(height * rows[1])]
 
 
 class ScreenUnavailable(RuntimeError):
@@ -68,7 +79,7 @@ def capture_loop(options, stop, on_colors, on_started=lambda: None, screen_facto
                 if on_frame is not None:
                     on_frame(frame)  # Other outputs, such as a keyboard, analyze it on their own threads.
                 target = np.array(analyze_frame(
-                    frame, options.multicolor, options.saturation_boost, options.minimum_saturation,
+                    band(frame, options.strip_band), options.multicolor, options.saturation_boost, options.minimum_saturation,
                     options.minimum_value, options.color_mode, options.spatial_mapping), dtype=np.float64)
                 last_sample = now
             if target is not None:

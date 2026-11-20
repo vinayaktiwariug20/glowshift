@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 from glowshift.capture.loop import capture_with_retry, open_screen
 from glowshift.devices.govee.connection import BluetoothWorker, ConnectionManager, ConnectionState
-from glowshift.engine.keyboard import KeyboardWorker, default_client_factory
+from glowshift.engine.keyboard import WHOLE_SCREEN, KeyboardWorker, default_client_factory
 
 logger = logging.getLogger('glowshift.session')
 
@@ -71,7 +71,8 @@ class Session:
     def start(self, options, connect, keyboard=False):
         """Start a new run. Returns its id, or None while the previous run is exiting.
 
-        ``keyboard`` also lights a keyboard through OpenRGB, independently of Bluetooth.
+        ``keyboard`` also lights a keyboard through OpenRGB, independently of Bluetooth:
+        a ``KeyboardSource``, or True for the whole screen as a mini screen.
         """
         current = self._run
         if current is not None and current.alive():
@@ -79,19 +80,21 @@ class Session:
             return None
         self._next_id += 1
         run = self._run = _Run(self._next_id, options, connect and self._link_factory is not None)
-        keyboard = keyboard and self._keyboard_client_factory is not None
-        self._sink(SessionEvent(run.id, 'started', {'connect': run.connect, 'keyboard': keyboard}))
+        source = WHOLE_SCREEN if keyboard is True else keyboard or None
+        if self._keyboard_client_factory is None:
+            source = None
+        self._sink(SessionEvent(run.id, 'started', {'connect': run.connect, 'keyboard': source is not None}))
         run.capture_thread = threading.Thread(target=self._capture, args=(run,), name='glowshift-capture', daemon=True)
         if run.connect:
             run.worker = self._make_worker(run)
             run.worker.start()
-        if keyboard:
-            run.keyboard = self._make_keyboard(run)
+        if source is not None:
+            run.keyboard = self._make_keyboard(run, source)
             run.keyboard.start()
         run.capture_thread.start()
         return run.id
 
-    def _make_keyboard(self, run):
+    def _make_keyboard(self, run, source):
         def on_status(text):
             self._sink(SessionEvent(run.id, 'keyboard', {'text': text}))
 
@@ -101,7 +104,8 @@ class Session:
         def on_exit(crashed):
             self._sink(SessionEvent(run.id, 'worker_exit', {'worker': 'keyboard', 'crashed': crashed}))
 
-        return KeyboardWorker(run.options, on_status, on_preview, self._keyboard_client_factory, on_exit=on_exit)
+        return KeyboardWorker(run.options, on_status, on_preview, self._keyboard_client_factory, source=source,
+                              on_exit=on_exit)
 
     def _make_worker(self, run):
         def on_event(event):
@@ -126,6 +130,8 @@ class Session:
         def on_colors(colors):
             if run.worker is not None:
                 run.worker.manager.publish(colors)
+            if run.keyboard is not None:
+                run.keyboard.offer_strip(colors)
             self._sink(SessionEvent(run.id, 'preview', {'colors': colors}))
 
         streak = 0

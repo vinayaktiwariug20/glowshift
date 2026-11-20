@@ -238,3 +238,18 @@ def test_keyboard_mini_screen_is_lit_and_previewed(harness):
         item.pump(lambda: tab.keyboard_status.get() == 'Keyboard: Stopped')
     finally:
         fake.close()
+
+
+def test_sky_and_ground_choices(harness):
+    from glowshift.capture.loop import UPPER_HALF
+    from glowshift.engine.keyboard import LOWER_HALF, MATCH_STRIP, WHOLE_SCREEN
+    tab = harness().app.screen_sync
+    assert (tab.strip_source.get(), tab.keyboard_source.get()) == ('Whole screen', 'Mini screen: whole screen')
+    assert tab.options().strip_band == (0.0, 1.0) and tab.keyboard_choice() is None
+    tab.keyboard.set(True)
+    assert tab.keyboard_choice() == WHOLE_SCREEN
+    tab.strip_source.set('Upper half (sky)')
+    tab.keyboard_source.set('Mini screen: lower half (ground)')
+    assert tab.options().strip_band == UPPER_HALF and tab.keyboard_choice() == LOWER_HALF
+    tab.keyboard_source.set('Match the strip')
+    assert tab.keyboard_choice() == MATCH_STRIP

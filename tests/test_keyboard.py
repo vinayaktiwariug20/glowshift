@@ -428,7 +428,8 @@ def test_check_tool_restores_the_previous_colors(server, monkeypatch, capsys, st
     monkeypatch.setattr(tool, 'OpenRGBClient', lambda name: OpenRGBClient(port=fake.port, name=name))
     monkeypatch.setattr(tool.time, 'sleep', lambda seconds: None)
     assert tool.main([stage]) == 0
-    fake.wait_for(lambda: len(fake.packets(1050)) >= 2)
+    expected = 4 if stage == 'solid' else 2  # Each pattern, then the restore.
+    fake.wait_for(lambda: len(fake.packets(1050)) == expected)
     sent = fake.packets(1050)
     assert sent[-1][1] == led_payload([(index, 2 * index, 3) for index in range(5)])  # Put back.
     assert fake.packets(1100) == []  # Already in Direct mode.
@@ -442,3 +443,96 @@ def test_check_tool_info_sends_nothing(server, monkeypatch, capsys):
     assert tool.main(['info']) == 0
     assert 'Synthetic Keyboard | 2 x 3 grid, 5 keys, 5 LEDs' in capsys.readouterr().out
     assert fake.packets(1050) == [] and fake.packets(1100) == []
+
+
+# Sky and ground: the strip's band, and what the keyboard shows.
+
+def first_strip_colors(options, frame):
+    from glowshift.capture.loop import capture_loop
+    stop = threading.Event()
+    seen = []
+
+    def on_colors(colors):
+        seen.append(colors)
+        stop.set()
+
+    capture_loop(options, stop, on_colors, screen_factory=FakeScreen([frame]))
+    return seen[0]
+
+
+def expected_strip(frame, options):
+    from glowshift.analysis.ambient import analyze_frame, dim
+    return dim(analyze_frame(frame, options.multicolor, options.saturation_boost, options.minimum_saturation,
+                             options.minimum_value, options.color_mode, options.spatial_mapping), options.brightness)
+
+
+def test_strip_shows_the_whole_screen_by_default():
+    frame = split_frame(360, 640, boundary=180)
+    options = capture_options()
+    assert options.strip_band == (0.0, 1.0)
+    assert first_strip_colors(options, frame) == expected_strip(frame, options)
+
+
+def test_strip_can_show_only_the_upper_half():
+    from glowshift.capture.loop import UPPER_HALF
+    frame = split_frame(360, 640, boundary=180)
+    options = capture_options(strip_band=UPPER_HALF, color_mode='Spatial (5x3)')
+    colors = first_strip_colors(options, frame)
+    assert colors == expected_strip(frame[:180], options)
+    assert all(blue > 0 and green == 0 for _red, green, blue in colors)  # Sky only.
+    assert colors != expected_strip(frame, options)
+
+
+def test_strip_grid_spreads_the_strip_left_to_right():
+    from glowshift.engine.keyboard import strip_grid
+    colors = [(index, 0, 0) for index in range(15)]
+    grid = strip_grid(colors, 6, 19)
+    assert len(grid) == 6 and all(row == grid[0] for row in grid)
+    assert [color[0] for color in grid[0]] == [column * 15 // 19 for column in range(19)]
+    assert grid[0][0] == (0, 0, 0) and grid[0][-1] == (14, 0, 0)
+
+
+def test_keyboard_can_show_the_lower_half(server, worker):
+    from glowshift.engine.keyboard import LOWER_HALF
+    fake = server()
+    recorder = Recorder()
+    item = KeyboardWorker(capture_options(transition=0, brightness=100), recorder.status, recorder.preview,
+                          fake.factory(), source=LOWER_HALF)
+    item.offer_frame(split_frame())
+    item.start()
+    try:
+        fake.wait_for(lambda: fake.packets(1050))
+        assert last_leds(fake) == led_payload([GREEN] * 5)  # Ground only.
+    finally:
+        item.request_stop()
+        item.thread.join(5)
+
+
+def test_keyboard_can_match_the_strip(server):
+    from glowshift.engine.keyboard import MATCH_STRIP
+    fake = server([FakeDevice(matrix=[[0, 1, 2], [3, 4, 5]], led_count=6)])
+    recorder = Recorder()
+    item = KeyboardWorker(capture_options(brightness=50), recorder.status, recorder.preview, fake.factory(),
+                          source=MATCH_STRIP)
+    strip = [(10 * index, 0, 0) for index in range(15)]
+    item.offer_strip(strip)
+    item.offer_frame(split_frame())  # Ignored: the keyboard copies the strip.
+    item.start()
+    try:
+        fake.wait_for(lambda: fake.packets(1050))
+        line = [strip[0], strip[5], strip[10]]  # 15 colours over 3 columns, as already dimmed.
+        assert last_leds(fake) == led_payload(line + line)
+        assert recorder.previews[-1] == [line, line]
+    finally:
+        item.request_stop()
+        item.thread.join(5)
+
+
+def test_session_hands_the_strip_colors_to_the_keyboard(server):
+    from glowshift.engine.keyboard import MATCH_STRIP
+    fake = server([FakeDevice(matrix=[list(range(15))], led_count=15)])
+    harness = SessionHarness(fake.factory())
+    harness.session.start(capture_options(interval=.01, transition=0), connect=False, keyboard=MATCH_STRIP)
+    harness.wait_for(lambda: harness.model.colors is not None and harness.model.keyboard_grid is not None)
+    harness.wait_for(lambda: harness.model.keyboard_grid == [list(map(tuple, harness.model.colors))])
+    assert harness.session.close(5)

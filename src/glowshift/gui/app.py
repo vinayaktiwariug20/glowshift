@@ -11,9 +11,10 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 
 from glowshift import settings
 from glowshift.animations.designs import Design, load_design, save_design
-from glowshift.capture.loop import CaptureOptions, open_screen
+from glowshift.capture.loop import UPPER_HALF, CaptureOptions, open_screen
+from glowshift.capture.loop import WHOLE_SCREEN as STRIP_WHOLE_SCREEN
 from glowshift.devices.govee.protocol import SEGMENTS
-from glowshift.engine.keyboard import DEFAULT_GRID, default_client_factory
+from glowshift.engine.keyboard import DEFAULT_GRID, LOWER_HALF, MATCH_STRIP, WHOLE_SCREEN, default_client_factory
 from glowshift.engine.session import Session, StatusModel
 from glowshift.engine.studio import FRAME_RATE, Studio
 
@@ -28,6 +29,10 @@ SCREEN_SYNC_DEFAULTS = {
     'multicolor': True, 'color_mode': 'Atmospheric', 'spatial_mapping': 'Serpentine', 'connect': False,
 }
 COLOR_MODES = ['Dominant colors', 'Atmospheric', 'Spatial (5x3)']
+STRIP_SOURCES = {'Whole screen': STRIP_WHOLE_SCREEN, 'Upper half (sky)': UPPER_HALF}
+KEYBOARD_SOURCES = {'Mini screen: whole screen': WHOLE_SCREEN,
+                    'Mini screen: lower half (ground)': LOWER_HALF,
+                    'Match the strip': MATCH_STRIP}
 EFFECTS = ['Moving gradient', 'Rainbow wave', 'Breathing', 'Comet', 'Random sparkle']
 
 
@@ -162,6 +167,8 @@ class ScreenSyncTab:
         self.spatial_mapping = tk.StringVar(value=defaults['spatial_mapping'])
         self.connect = tk.BooleanVar(value=defaults['connect'])
         self.keyboard = tk.BooleanVar(value=False)
+        self.strip_source = tk.StringVar(value='Whole screen')
+        self.keyboard_source = tk.StringVar(value='Mini screen: whole screen')
         self.status = tk.StringVar(value=self.model.message)
         self.capture_status = tk.StringVar(value='Capture: idle')
         self.ble_status = tk.StringVar(value='Bluetooth: idle')
@@ -228,6 +235,11 @@ class ScreenSyncTab:
                         variable=self.connect).pack(anchor='w', pady=3)
         ttk.Checkbutton(outer, text='Also light the keyboard as a mini screen (needs OpenRGB running '
                                     'with its SDK server on)', variable=self.keyboard).pack(anchor='w', pady=3)
+        for label, var, values in [('Strip shows', self.strip_source, list(STRIP_SOURCES)),
+                                   ('Keyboard shows', self.keyboard_source, list(KEYBOARD_SOURCES))]:
+            row = ttk.Frame(outer); row.pack(fill='x', pady=3)
+            ttk.Label(row, text=label, width=24).pack(side='left')
+            ttk.Combobox(row, textvariable=var, values=values, state='readonly', width=32).pack(side='left', padx=6)
         ttk.Label(outer, text='Live preview (approximate strip colors)',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(16, 5))
         row = ttk.Frame(outer); row.pack(fill='x')
@@ -259,7 +271,14 @@ class ScreenSyncTab:
             saturation_boost=float(self.saturation_boost.get()),
             minimum_saturation=float(self.minimum_saturation.get()),
             minimum_value=float(self.minimum_value.get()), color_mode=self.color_mode.get(),
-            spatial_mapping=self.spatial_mapping.get())
+            spatial_mapping=self.spatial_mapping.get(),
+            strip_band=STRIP_SOURCES.get(self.strip_source.get(), STRIP_WHOLE_SCREEN))
+
+    def keyboard_choice(self):
+        """What the keyboard should show, or None when it is off."""
+        if not self.keyboard.get():
+            return None
+        return KEYBOARD_SOURCES.get(self.keyboard_source.get(), WHOLE_SCREEN)
 
     def start(self):
         if not self.monitors:
@@ -275,7 +294,7 @@ class ScreenSyncTab:
             self._handover_waited = 0
             self.app.root.after(HANDOVER_MS, self._start_after_studio)
             return
-        self.app.session.start(self.options(), connect, self.keyboard.get())
+        self.app.session.start(self.options(), connect, self.keyboard_choice())
 
     def _start_after_studio(self):
         if self.app.studio.active:
@@ -285,7 +304,7 @@ class ScreenSyncTab:
                 return
             self.app.root.after(HANDOVER_MS, self._start_after_studio)
             return
-        self.app.session.start(self.options(), True, self.keyboard.get())
+        self.app.session.start(self.options(), True, self.keyboard_choice())
 
     def stop(self):
         self.app.session.stop()

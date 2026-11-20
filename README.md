@@ -9,8 +9,8 @@ animations.
 Other Govee models are not supported.
 
 > GlowShift is an independent project. It is not affiliated with, endorsed by or
-> supported by Govee. "Govee" is a trademark of its owner and is used here only to
-> name the hardware this works with.
+> supported by Govee, AULA or the OpenRGB project. "Govee" and "AULA" are trademarks of
+> their owners and are used here only to name the hardware this works with.
 
 ## Requirements
 
@@ -73,6 +73,12 @@ should work.
 1. Install OpenRGB, check that it lists your keyboard and can change its colours.
 2. In OpenRGB's SDK Server tab, start the server (port 6742, the default).
 3. In Screen sync, tick "Also light the keyboard" and press Start.
+
+**Keyboard shows** picks what the keys show: the whole screen, only its lower half
+(the ground, since a keyboard sits below the screen), or the strip's colours spread from
+left to right. **Strip shows** can likewise limit the strip to the upper half of the
+screen (the sky). Strip on the upper half and keyboard on the lower half splits a scene
+between them. Both default to the whole screen.
 
 The keyboard runs separately from the strip: it updates up to 10 times a second, follows
 the same brightness, saturation and transition settings, and a keyboard problem never
