@@ -50,7 +50,7 @@ def _grab(screen, monitor):
 
 
 def capture_loop(options, stop, on_colors, on_started=lambda: None, screen_factory=open_screen,
-                 clock=time.monotonic):
+                 clock=time.monotonic, on_frame=None):
     with _open(screen_factory) as screen:
         monitors = screen.monitors[1:]
         if options.monitor >= len(monitors):
@@ -65,6 +65,8 @@ def capture_loop(options, stop, on_colors, on_started=lambda: None, screen_facto
             now = clock()
             if now - last_sample >= options.interval:
                 frame = np.asarray(_grab(screen, monitor))
+                if on_frame is not None:
+                    on_frame(frame)  # Other outputs, such as a keyboard, analyze it on their own threads.
                 target = np.array(analyze_frame(
                     frame, options.multicolor, options.saturation_boost, options.minimum_saturation,
                     options.minimum_value, options.color_mode, options.spatial_mapping), dtype=np.float64)
@@ -76,7 +78,7 @@ def capture_loop(options, stop, on_colors, on_started=lambda: None, screen_facto
 
 
 def capture_with_retry(options, stop, on_colors, on_started=lambda: None, on_unavailable=lambda error, wait: None,
-                       screen_factory=open_screen, clock=time.monotonic):
+                       screen_factory=open_screen, clock=time.monotonic, on_frame=None):
     """Run ``capture_loop``, reopening the screen after ``ScreenUnavailable`` until stopped.
 
     Other errors, such as a failure in color analysis, still end the capture. While the
@@ -98,7 +100,7 @@ def capture_with_retry(options, stop, on_colors, on_started=lambda: None, on_una
     while not stop.is_set():
         started = False
         try:
-            capture_loop(options, stop, colors, screen_factory=screen_factory, clock=clock)
+            capture_loop(options, stop, colors, screen_factory=screen_factory, clock=clock, on_frame=on_frame)
             return
         except ScreenUnavailable as error:
             wait = RETRY_DELAYS[min(failures, len(RETRY_DELAYS) - 1)]

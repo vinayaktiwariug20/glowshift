@@ -15,15 +15,24 @@ ADDRESS = 'AA:BB:CC:DD:EE:FF'  # Fictional. Allowed by the privacy test.
 
 
 class Harness:
-    def __init__(self, tmp_path, address=ADDRESS):
+    def __init__(self, tmp_path, address=ADDRESS, keyboard_client_factory=None):
         self.radio = FakeRadio([Step()])
+        self.openrgb_calls = 0
+        self.keyboard_client_factory = keyboard_client_factory
         self.settings_path = tmp_path / 'settings.json'
         if address:
             settings.save_device_address(address, self.settings_path)
         self.addresses = []
         self.root = tk_window()
         self.app = gui.App(self.root, screen_factory=FakeScreen([dark_blue_cave()]),
-                           link_factory_for=self.factory_for, settings_path=self.settings_path, environ={})
+                           link_factory_for=self.factory_for, settings_path=self.settings_path, environ={},
+                           keyboard_client_factory=self.openrgb)
+
+    def openrgb(self):
+        self.openrgb_calls += 1
+        if self.keyboard_client_factory is None:
+            raise AssertionError('this test must not contact OpenRGB')
+        return self.keyboard_client_factory()
 
     def factory_for(self, address):
         self.addresses.append(address)
@@ -197,3 +206,35 @@ def test_shutdown_alone_releases_studio(harness):
     assert item.app.shutdown(5)
     assert not item.app.studio.active
     assert len(item.radio.operations('disconnect')) == 1
+
+
+def test_keyboard_is_off_by_default(harness):
+    item = harness()
+    assert item.app.screen_sync.keyboard.get() is False
+    item.app.screen_sync.interval.set(1)
+    item.app.screen_sync.start()
+    item.pump(lambda: item.app.screen_sync._shown_colors is not None)
+    assert item.openrgb_calls == 0
+    assert item.app.screen_sync.keyboard_status.get() == 'Keyboard: Off'
+
+
+def test_keyboard_mini_screen_is_lit_and_previewed(harness):
+    from fake_openrgb import FakeOpenRGB
+    fake = FakeOpenRGB()
+    try:
+        item = harness(keyboard_client_factory=fake.factory())
+        tab = item.app.screen_sync
+        tab.keyboard.set(True)
+        tab.interval.set(1)
+        tab.start()
+        item.pump(lambda: tab.keyboard_status.get() == 'Keyboard: Lighting Synthetic Keyboard')
+        item.pump(lambda: tab._shown_grid is not None)
+        assert len(tab._keyboard_cells) == 2 * 3  # The synthetic keyboard's 2 x 3 layout.
+        fills = {tab.keyboard_preview.itemcget(cell, 'fill') for cell in tab._keyboard_cells.values()}
+        assert fills and '' not in fills
+        assert fake.packets(1050)
+        assert item.radio.links == []  # The strip stays untouched in preview only.
+        tab.stop()
+        item.pump(lambda: tab.keyboard_status.get() == 'Keyboard: Stopped')
+    finally:
+        fake.close()

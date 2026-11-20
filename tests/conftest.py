@@ -2,6 +2,7 @@ import faulthandler
 import gc
 import json
 import os
+import socket
 import sys
 import threading
 from pathlib import Path
@@ -55,6 +56,14 @@ def no_real_hardware():
     patch.setattr(bleak.BleakScanner, '__init__', forbidden)
     patch.setattr(bleak.BleakScanner, 'find_device_by_address', forbidden)
     patch.setattr(mss, 'mss', forbidden)
+    real_connect = socket.socket.connect
+
+    def connect(sock, address):
+        if isinstance(address, tuple) and address[1] == 6742:  # OpenRGB's port: a real keyboard.
+            raise AssertionError('tests must not touch real hardware')
+        return real_connect(sock, address)
+
+    patch.setattr(socket.socket, 'connect', connect)
     yield
     patch.undo()
 

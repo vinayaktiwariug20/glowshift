@@ -13,6 +13,7 @@ from glowshift import settings
 from glowshift.animations.designs import Design, load_design, save_design
 from glowshift.capture.loop import CaptureOptions, open_screen
 from glowshift.devices.govee.protocol import SEGMENTS
+from glowshift.engine.keyboard import DEFAULT_GRID, default_client_factory
 from glowshift.engine.session import Session, StatusModel
 from glowshift.engine.studio import FRAME_RATE, Studio
 
@@ -41,7 +42,8 @@ def bleak_link_factory(address):
 
 class App:
     def __init__(self, root, screen_factory=open_screen, link_factory_for=bleak_link_factory,
-                 settings_path=None, on_connection_event=None, environ=None):
+                 settings_path=None, on_connection_event=None, environ=None,
+                 keyboard_client_factory=default_client_factory):
         self.root = root
         self._link_factory_for = link_factory_for
         self._settings_path = settings_path
@@ -52,7 +54,7 @@ class App:
         root.minsize(680, 420)
         self.address = self._load_address()
         self.session = Session(lambda event: self.messages.put(('sync', event)),
-                               self._link, screen_factory, on_connection_event)
+                               self._link, screen_factory, on_connection_event, keyboard_client_factory)
         self.studio = Studio(self._link, lambda event: self.messages.put(('studio', event)), on_connection_event)
         self.status = tk.StringVar()
 
@@ -159,10 +161,14 @@ class ScreenSyncTab:
         self.color_mode = tk.StringVar(value=defaults['color_mode'])
         self.spatial_mapping = tk.StringVar(value=defaults['spatial_mapping'])
         self.connect = tk.BooleanVar(value=defaults['connect'])
+        self.keyboard = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value=self.model.message)
         self.capture_status = tk.StringVar(value='Capture: idle')
         self.ble_status = tk.StringVar(value='Bluetooth: idle')
+        self.keyboard_status = tk.StringVar(value='Keyboard: off')
         self.preview = []
+        self._keyboard_cells = {}
+        self._shown_grid = None
         self._shown_colors = None
         self._handover_waited = 0
 
@@ -220,6 +226,8 @@ class ScreenSyncTab:
                         variable=self.multicolor).pack(anchor='w', pady=(10, 3))
         ttk.Checkbutton(outer, text='Send colors to physical strip (uncheck for preview only)',
                         variable=self.connect).pack(anchor='w', pady=3)
+        ttk.Checkbutton(outer, text='Also light the keyboard as a mini screen (needs OpenRGB running '
+                                    'with its SDK server on)', variable=self.keyboard).pack(anchor='w', pady=3)
         ttk.Label(outer, text='Live preview (approximate strip colors)',
                   font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(16, 5))
         row = ttk.Frame(outer); row.pack(fill='x')
@@ -227,12 +235,17 @@ class ScreenSyncTab:
             box = tk.Label(row, bg='#2d3750', height=3)
             box.pack(side='left', fill='x', expand=True, padx=1)
             self.preview.append(box)
+        ttk.Label(outer, text='Keyboard preview (mini screen)',
+                  font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(12, 5))
+        self.keyboard_preview = tk.Canvas(outer, height=DEFAULT_GRID[0] * 14, highlightthickness=0, bg='#202533')
+        self.keyboard_preview.pack(fill='x')
         row = ttk.Frame(outer); row.pack(fill='x', pady=(17, 10))
         ttk.Button(row, text='Start', command=self.start).pack(side='left', padx=(0, 8))
         ttk.Button(row, text='Stop', command=self.stop).pack(side='left')
         ttk.Label(outer, textvariable=self.status, wraplength=730).pack(anchor='w', pady=5)
         ttk.Label(outer, textvariable=self.capture_status).pack(anchor='w')
         ttk.Label(outer, textvariable=self.ble_status, wraplength=730).pack(anchor='w')
+        ttk.Label(outer, textvariable=self.keyboard_status, wraplength=730).pack(anchor='w')
         ttk.Label(outer, wraplength=730, text=(
             'Stop before changing settings. Capture and Bluetooth are independent. Diagnostic records are '
             'kept in %LOCALAPPDATA%\\GlowShift\\logs; screenshots are not saved. Use borderless/windowed '
@@ -262,7 +275,7 @@ class ScreenSyncTab:
             self._handover_waited = 0
             self.app.root.after(HANDOVER_MS, self._start_after_studio)
             return
-        self.app.session.start(self.options(), connect)
+        self.app.session.start(self.options(), connect, self.keyboard.get())
 
     def _start_after_studio(self):
         if self.app.studio.active:
@@ -272,7 +285,7 @@ class ScreenSyncTab:
                 return
             self.app.root.after(HANDOVER_MS, self._start_after_studio)
             return
-        self.app.session.start(self.options(), True)
+        self.app.session.start(self.options(), True, self.keyboard.get())
 
     def stop(self):
         self.app.session.stop()
@@ -283,10 +296,32 @@ class ScreenSyncTab:
         self.status.set(self.model.message)
         self.capture_status.set('Capture: ' + self.model.capture)
         self.ble_status.set('Bluetooth: ' + self.model.bluetooth)
+        self.keyboard_status.set('Keyboard: ' + self.model.keyboard)
         if self.model.colors is not None and self.model.colors != self._shown_colors:
             self._shown_colors = self.model.colors
             for box, color in zip(self.preview, self.model.colors):
                 box.configure(bg='#%02x%02x%02x' % tuple(color))
+        if self.model.keyboard_grid is not None and self.model.keyboard_grid != self._shown_grid:
+            self._show_keyboard(self.model.keyboard_grid)
+
+    def _show_keyboard(self, grid):
+        rows, columns = len(grid), len(grid[0])
+        width = max(self.keyboard_preview.winfo_width(), columns * 12)
+        if self._shown_grid is None or (len(self._shown_grid), len(self._shown_grid[0])) != (rows, columns):
+            self.keyboard_preview.delete('all')
+            self._keyboard_cells = {}
+            self.keyboard_preview.configure(height=rows * 14)
+            size = width / columns
+            for row in range(rows):
+                for column in range(columns):
+                    x = column * size
+                    self._keyboard_cells[row, column] = self.keyboard_preview.create_rectangle(
+                        x + 1, row * 14 + 1, x + size - 1, row * 14 + 13, width=0)
+        for row in range(rows):
+            for column in range(columns):
+                self.keyboard_preview.itemconfigure(self._keyboard_cells[row, column],
+                                                    fill='#%02x%02x%02x' % tuple(grid[row][column]))
+        self._shown_grid = grid
 
 
 class StudioTab:

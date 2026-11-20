@@ -63,6 +63,27 @@ controls are refused while screen sync is sending. Preview-only screen sync and 
 can run together. Brightness set in Studio is the strip's own setting and stays in
 effect during screen sync.
 
+### Keyboard as a mini screen (OpenRGB)
+
+Screen sync can also light a keyboard through [OpenRGB](https://openrgb.org): each key
+shows the part of the screen it would sit under, on the keyboard's own key grid. Tested
+with an AULA F99 over USB (6 x 19 grid). Any keyboard OpenRGB lists with a key layout
+should work.
+
+1. Install OpenRGB, check that it lists your keyboard and can change its colours.
+2. In OpenRGB's SDK Server tab, start the server (port 6742, the default).
+3. In Screen sync, tick "Also light the keyboard" and press Start.
+
+The keyboard runs separately from the strip: it updates up to 10 times a second, follows
+the same brightness, saturation and transition settings, and a keyboard problem never
+affects Bluetooth. It works with "Send colors to physical strip" off. If OpenRGB is not
+running, the status line says so and GlowShift tries again every 5 seconds. GlowShift
+only sets key colours, and switches OpenRGB to direct control if the keyboard is in
+another mode. The keyboard keeps its last colours when you stop.
+
+`tools/openrgb_keyboard_check.py` checks a keyboard stage by stage (`info`, `solid`,
+`orientation`, `grid`) and puts back the previous colours after each stage.
+
 ### What to expect from Bluetooth
 
 - Screen sync updates the strip at most every 1.2 seconds. That limit keeps the H617A

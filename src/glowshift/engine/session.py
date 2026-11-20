@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from glowshift.capture.loop import capture_with_retry, open_screen
 from glowshift.devices.govee.connection import BluetoothWorker, ConnectionManager, ConnectionState
+from glowshift.engine.keyboard import KeyboardWorker, default_client_factory
 
 logger = logging.getLogger('glowshift.session')
 
@@ -41,18 +42,23 @@ class _Run:
         self.stop = threading.Event()
         self.capture_thread = None
         self.worker = None
+        self.keyboard = None
+
+    def threads(self):
+        return [self.capture_thread, self.worker and self.worker.thread, self.keyboard and self.keyboard.thread]
 
     def alive(self):
-        threads = [self.capture_thread, self.worker and self.worker.thread]
-        return any(thread is not None and thread.is_alive() for thread in threads)
+        return any(thread is not None and thread.is_alive() for thread in self.threads())
 
 
 class Session:
-    def __init__(self, sink, link_factory=None, screen_factory=open_screen, on_connection_event=None):
+    def __init__(self, sink, link_factory=None, screen_factory=open_screen, on_connection_event=None,
+                 keyboard_client_factory=default_client_factory):
         self._sink = sink
         self._link_factory = link_factory
         self._screen_factory = screen_factory
         self._on_connection_event = on_connection_event
+        self._keyboard_client_factory = keyboard_client_factory
         self._run = None
         self._next_id = 0
 
@@ -62,21 +68,40 @@ class Session:
         run = self._run
         return run is not None and run.worker is not None and run.worker.thread.is_alive()
 
-    def start(self, options, connect):
-        """Start a new run. Returns its id, or None while the previous run is exiting."""
+    def start(self, options, connect, keyboard=False):
+        """Start a new run. Returns its id, or None while the previous run is exiting.
+
+        ``keyboard`` also lights a keyboard through OpenRGB, independently of Bluetooth.
+        """
         current = self._run
         if current is not None and current.alive():
             self._sink(SessionEvent(current.id, 'start_refused'))
             return None
         self._next_id += 1
         run = self._run = _Run(self._next_id, options, connect and self._link_factory is not None)
-        self._sink(SessionEvent(run.id, 'started', {'connect': run.connect}))
+        keyboard = keyboard and self._keyboard_client_factory is not None
+        self._sink(SessionEvent(run.id, 'started', {'connect': run.connect, 'keyboard': keyboard}))
         run.capture_thread = threading.Thread(target=self._capture, args=(run,), name='glowshift-capture', daemon=True)
         if run.connect:
             run.worker = self._make_worker(run)
             run.worker.start()
+        if keyboard:
+            run.keyboard = self._make_keyboard(run)
+            run.keyboard.start()
         run.capture_thread.start()
         return run.id
+
+    def _make_keyboard(self, run):
+        def on_status(text):
+            self._sink(SessionEvent(run.id, 'keyboard', {'text': text}))
+
+        def on_preview(grid):
+            self._sink(SessionEvent(run.id, 'keyboard_preview', {'grid': grid}))
+
+        def on_exit(crashed):
+            self._sink(SessionEvent(run.id, 'worker_exit', {'worker': 'keyboard', 'crashed': crashed}))
+
+        return KeyboardWorker(run.options, on_status, on_preview, self._keyboard_client_factory, on_exit=on_exit)
 
     def _make_worker(self, run):
         def on_event(event):
@@ -121,7 +146,8 @@ class Session:
                 'text': f'Screen unavailable; retrying in {wait:g} s'}))
 
         try:
-            capture_with_retry(run.options, run.stop, on_colors, on_started, on_unavailable, self._screen_factory)
+            capture_with_retry(run.options, run.stop, on_colors, on_started, on_unavailable, self._screen_factory,
+                               on_frame=run.keyboard.offer_frame if run.keyboard is not None else None)
         except Exception:
             logger.exception('Capture worker failed')
             self._sink(SessionEvent(run.id, 'capture_failed'))
@@ -133,6 +159,8 @@ class Session:
         run.stop.set()
         if run.worker is not None:
             run.worker.request_stop()
+        if run.keyboard is not None:
+            run.keyboard.request_stop()
 
     def stop(self):
         """Ask the current run to stop. Returns immediately; workers report their exit."""
@@ -149,7 +177,7 @@ class Session:
         if run is None:
             return True
         deadline = time.monotonic() + timeout
-        for thread in (run.capture_thread, run.worker and run.worker.thread):
+        for thread in run.threads():
             if thread is not None and thread.is_alive():
                 thread.join(max(0.0, deadline - time.monotonic()))
         if run.alive():
@@ -168,6 +196,8 @@ class StatusModel:
         self.capture = 'idle'
         self.bluetooth = 'idle'
         self.colors = None
+        self.keyboard = 'Off'
+        self.keyboard_grid = None
         self.ignored_events = 0
         self._waiting = set()
         self._stopping = False
@@ -177,10 +207,16 @@ class StatusModel:
         """Apply an event. Returns False if it belongs to an older run."""
         if event.kind == 'started' and event.run_id > self.run_id:
             self.run_id = event.run_id
-            self._waiting = {'capture', 'bluetooth'} if event.data['connect'] else {'capture'}
+            self._waiting = {'capture'}
+            if event.data['connect']:
+                self._waiting.add('bluetooth')
+            if event.data.get('keyboard'):
+                self._waiting.add('keyboard')
             self._stopping = self._failed = False
             self.capture = 'Starting'
             self.bluetooth = 'Starting' if event.data['connect'] else 'Preview only'
+            self.keyboard = 'Starting' if event.data.get('keyboard') else 'Off'
+            self.keyboard_grid = None
             self.message = 'Screen sync running.'
             return True
         if event.run_id != self.run_id:
@@ -197,6 +233,12 @@ class StatusModel:
 
     def _on_bluetooth(self, data):
         self.bluetooth = data['text']
+
+    def _on_keyboard(self, data):
+        self.keyboard = data['text']
+
+    def _on_keyboard_preview(self, data):
+        self.keyboard_grid = data['grid']
 
     def _on_start_refused(self, data):
         self.message = 'Previous run is still stopping; please wait.'
@@ -217,6 +259,8 @@ class StatusModel:
         self._waiting.discard(data['worker'])
         if data['worker'] == 'capture':
             self.capture = 'Capture failed; see log' if self._failed else 'Stopped'
+        elif data['worker'] == 'keyboard':
+            self.keyboard = 'Worker exited; see log' if data['crashed'] else 'Stopped'
         elif data['crashed']:
             self.bluetooth = 'Worker exited; see log'
         else:
